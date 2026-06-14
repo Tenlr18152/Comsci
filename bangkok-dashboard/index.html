@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BKK Smart City Live Dashboard</title>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    
+    <!-- Top Navigation Header -->
+    <header class="main-header glass-panel">
+      <div class="logo-area">
+        <div class="logo-icon"><i data-lucide="shield-alert" class="glow-icon"></i></div>
+        <div class="title-meta">
+          <h1>BKK SMART CITY LIVE</h1>
+          <span class="subtitle">ระบบตรวจวัดสภาพแวดล้อมและจัดการเมืองกรุงเทพฯ แบบเรียลไทม์</span>
+        </div>
+      </div>
+      
+      <!-- Top Overview Metrics Grid -->
+      <div class="top-stats-grid">
+        <div class="top-stat-card glass-panel" id="stat-avg-pm25">
+          <span class="label"><i data-lucide="wind"></i> ค่าเฉลี่ยฝุ่น PM2.5</span>
+          <span class="value" id="bkk-avg-pm25">--</span>
+          <span class="unit">µg/m³</span>
+          <span class="badge" id="bkk-pm25-badge">--</span>
+        </div>
+        <div class="top-stat-card glass-panel" id="stat-active-flood">
+          <span class="label"><i data-lucide="droplet"></i> จุดเฝ้าระวังน้ำท่วม</span>
+          <span class="value text-warning" id="bkk-active-flood">--</span>
+          <span class="unit">เขต</span>
+          <span class="badge badge-warning" id="bkk-flood-badge">เฝ้าระวัง</span>
+        </div>
+        <div class="top-stat-card glass-panel" id="stat-traffy-solved">
+          <span class="label"><i data-lucide="check-circle-2"></i> สถิติแก้เรื่องร้องเรียน</span>
+          <span class="value text-success" id="bkk-traffy-rate">--</span>
+          <span class="unit">%</span>
+          <span class="badge badge-success" id="bkk-traffy-badge">ประสิทธิภาพสูง</span>
+        </div>
+      </div>
+
+      <div class="time-widget">
+        <i data-lucide="clock"></i>
+        <div class="date-time">
+          <span id="live-time">00:00:00</span>
+          <span id="live-date">--</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs (Dynamic Layers switcher) -->
+    <nav class="layer-nav glass-panel">
+      <button class="nav-tab active" id="tab-pm25" onclick="switchLayer('pm25')">
+        <i data-lucide="wind"></i>
+        <div class="tab-label">
+          <span class="title">มลพิษฝุ่น PM2.5</span>
+          <span class="desc">ดัชนีคุณภาพอากาศรายเขต</span>
+        </div>
+      </button>
+      <button class="nav-tab" id="tab-flood" onclick="switchLayer('flood')">
+        <i data-lucide="waves"></i>
+        <div class="tab-label">
+          <span class="title">ระบบระบายน้ำ & น้ำขัง</span>
+          <span class="desc">ความเสี่ยงและระดับน้ำปัจจุบัน</span>
+        </div>
+      </button>
+      <button class="nav-tab" id="tab-complaints" onclick="switchLayer('complaints')">
+        <i data-lucide="megaphone"></i>
+        <div class="tab-label">
+          <span class="title">Traffy Fondue</span>
+          <span class="desc">เรื่องร้องเรียนและการจัดการของเมือง</span>
+        </div>
+      </button>
+    </nav>
+
+    <!-- Main Workspace Layout Grid -->
+    <main class="workspace-grid">
+      
+      <!-- Left Sidebar: Filter & Districts list -->
+      <aside class="sidebar-left glass-panel">
+        <div class="search-filter-box">
+          <div class="search-wrapper">
+            <i data-lucide="search" class="search-icon"></i>
+            <input type="text" id="district-search" placeholder="ค้นหาเขต (ภาษาไทย หรือ EN)..." oninput="filterDistricts()">
+          </div>
+          <div class="select-wrapper">
+            <i data-lucide="map" class="filter-icon"></i>
+            <select id="zone-filter" onchange="filterDistricts()">
+              <option value="all">แสดงทุกกลุ่มเขต (ทั้งหมด)</option>
+              <option value="Central Bangkok">กรุงเทพกลาง (Central)</option>
+              <option value="Northern Bangkok">กรุงเทพเหนือ (Northern)</option>
+              <option value="Eastern Bangkok">กรุงเทพตะวันออก (Eastern)</option>
+              <option value="Southern Bangkok">กรุงเทพใต้ (Southern)</option>
+              <option value="Thon Buri North">กรุงธนเหนือ (Thon Buri North)</option>
+              <option value="Thon Buri South">กรุงธนใต้ (Thon Buri South)</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="districts-list-header">
+          <span>รายชื่อเขตจำแนกตามดัชนี</span>
+          <span id="districts-count">50 เขต</span>
+        </div>
+        
+        <div class="districts-list scrollable-area" id="districts-list-container">
+          <!-- District rows will be inserted here dynamically -->
+          <div class="loading-state">
+            <div class="spinner"></div>
+            <span>กำลังโหลดข้อมูลแผนที่และสถิติเขต...</span>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Center: Interactive Map Container -->
+      <section class="map-view glass-panel">
+        <div id="map"></div>
+        <div class="map-legend glass-panel" id="map-legend">
+          <!-- Dynamic legend will be loaded here -->
+        </div>
+        <div class="map-floating-controls">
+          <button class="control-btn" id="btn-reset-zoom" onclick="resetMapZoom()" title="รีเซ็ตมุมมองแผนที่">
+            <i data-lucide="maximize"></i>
+          </button>
+          <button class="control-btn" id="btn-toggle-left" onclick="toggleSidebar('left')" title="ซ่อน/แสดงรายการเขต">
+            <i data-lucide="panel-left-close" id="icon-toggle-left"></i>
+          </button>
+          <button class="control-btn" id="btn-toggle-right" onclick="toggleSidebar('right')" title="ซ่อน/แสดงรายละเอียดเขต">
+            <i data-lucide="panel-right-close" id="icon-toggle-right"></i>
+          </button>
+          <button class="control-btn mega-map-btn" id="btn-mega-map" onclick="toggleMegaMap()" title="โหมดแผนที่เต็มจอ">
+            <i data-lucide="expand" id="icon-mega-map"></i>
+          </button>
+        </div>
+      </section>
+
+      <!-- Right Sidebar: District Details -->
+      <aside class="sidebar-right glass-panel" id="sidebar-details">
+        
+        <!-- Default State: BKK Aggregate Stats -->
+        <div id="details-default-state" class="details-state">
+          <div class="details-welcome">
+            <i data-lucide="map-pin" class="welcome-icon pulse-animation"></i>
+            <h2>เจาะลึกข้อมูลรายเขต</h2>
+            <p>คลิกเลือกเขตบนแผนที่ หรือค้นหาในแถบรายการด้านซ้าย เพื่อตรวจสอบรายงานสภาพแวดล้อม มลพิษฝุ่น และการแก้ปัญหาร้องเรียนอย่างละเอียด</p>
+          </div>
+          
+          <hr class="separator">
+          
+          <div class="overview-section">
+            <h3>อันดับค่าเฉลี่ยฝุ่น PM2.5 สูงสุดวันนี้</h3>
+            <div class="rank-list" id="top-pm25-ranking">
+              <!-- Top ranked districts will be loaded here dynamically -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Detail State: Loaded on District Selection -->
+        <div id="details-active-state" class="details-state hidden">
+          <div class="district-header">
+            <div class="header-main">
+              <span class="postcode" id="det-postcode">--</span>
+              <h2 id="det-name-th">ชื่อเขต</h2>
+              <span class="name-en" id="det-name-en">District Name</span>
+              <span class="zone-badge" id="det-zone">กลุ่มเขต</span>
+            </div>
+            <button class="close-btn" onclick="deselectDistrict()">&times;</button>
+          </div>
+
+          <div class="tabs-metrics scrollable-area">
+            
+            <!-- Demographic Section -->
+            <section class="metric-section glass-panel">
+              <h4><i data-lucide="users"></i> ข้อมูลประชากรและพื้นที่</h4>
+              <div class="demographics-grid">
+                <div class="demo-card">
+                  <span class="lbl">ประชากรทั้งหมด</span>
+                  <span class="val" id="det-pop">--</span>
+                  <span class="unit">คน</span>
+                </div>
+                <div class="demo-card">
+                  <span class="lbl">พื้นที่ทั้งหมด</span>
+                  <span class="val" id="det-area">--</span>
+                  <span class="unit">ตร.กม.</span>
+                </div>
+                <div class="demo-card">
+                  <span class="lbl">ความหนาแน่น</span>
+                  <span class="val" id="det-density">--</span>
+                  <span class="unit">คน/ตร.กม.</span>
+                </div>
+              </div>
+            </section>
+
+            <!-- Layer Specific Metric Details (Dynamically shown) -->
+            
+            <!-- PM2.5 Section details -->
+            <section class="metric-section glass-panel layer-details-section" id="detail-section-pm25">
+              <h4><i data-lucide="wind"></i> รายงานคุณภาพอากาศ</h4>
+              <div class="radial-gauge-wrapper">
+                <div class="gauge-display">
+                  <span class="gauge-value" id="det-pm25-val">--</span>
+                  <span class="gauge-unit">µg/m³</span>
+                </div>
+                <div class="gauge-meta">
+                  <span class="status-title" id="det-pm25-status">ปกติ</span>
+                  <p class="status-desc">ดัชนีชี้วัดฝุ่นละอองขนาดไม่เกิน 2.5 ไมครอน</p>
+                </div>
+              </div>
+              <div class="chart-container">
+                <canvas id="pm25-history-chart"></canvas>
+              </div>
+            </section>
+
+            <!-- Flood Section details -->
+            <section class="metric-section glass-panel layer-details-section" id="detail-section-flood">
+              <h4><i data-lucide="waves"></i> สถานะการระบายน้ำ & จุดน้ำขัง</h4>
+              <div class="water-gauge-container">
+                <div class="water-pipe-card">
+                  <div class="fluid-container">
+                    <div class="fluid-wave" id="det-flood-fluid"></div>
+                    <span class="fluid-percent" id="det-flood-percent">0%</span>
+                  </div>
+                  <div class="water-meta">
+                    <span class="alert-lvl" id="det-flood-lvl">ระดับความเสี่ยง</span>
+                    <span class="alert-status" id="det-flood-status">สถานะจุดระบายน้ำ</span>
+                  </div>
+                </div>
+              </div>
+              <ul class="station-list">
+                <li><i data-lucide="check" class="text-success"></i> เครื่องสูบน้ำหลักทำงานปกติ (4 เครื่อง)</li>
+                <li><i data-lucide="check" class="text-success"></i> สถานีตรวจวัดระดับน้ำไฟฟ้าออนไลน์</li>
+                <li><i data-lucide="info" class="text-info"></i> เชื่อมต่อโครงข่ายคลองแสนแสบ & คลองลาดพร้าว</li>
+              </ul>
+            </section>
+
+            <!-- Traffy Complaints Section details -->
+            <section class="metric-section glass-panel layer-details-section" id="detail-section-complaints">
+              <h4><i data-lucide="megaphone"></i> สถิติจาก Traffy Fondue</h4>
+              <div class="complaints-stats-grid">
+                <div class="comp-stat-card bg-glow-purple">
+                  <span class="title">แจ้งรวมทั้งหมด</span>
+                  <span class="number" id="det-comp-total">--</span>
+                  <span class="sub">เรื่องร้องเรียนสะสม</span>
+                </div>
+                <div class="comp-stat-half-grid">
+                  <div class="comp-stat-card bg-glow-green">
+                    <span class="title">แก้ไขเสร็จสิ้น</span>
+                    <span class="number" id="det-comp-solved">--</span>
+                    <span class="percentage" id="det-comp-rate">--%</span>
+                  </div>
+                  <div class="comp-stat-card bg-glow-orange">
+                    <span class="title">อยู่ระหว่างดำเนินการ</span>
+                    <span class="number" id="det-comp-pending">--</span>
+                    <span class="sub">เรื่องตกค้าง</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="chart-container">
+                <canvas id="complaints-breakdown-chart"></canvas>
+              </div>
+            </section>
+            
+          </div>
+        </div>
+
+      </aside>
+
+    </main>
+
+    <!-- Footer Area -->
+    <footer class="app-footer glass-panel">
+      <div class="footer-left">
+        <span>© 2026 กรุงเทพมหานคร • ศูนย์ความร่วมมือการพัฒนาสมาร์ทซิตี้ (BKK Smart City Center)</span>
+      </div>
+      <div class="footer-right">
+        <span class="status-indicator online"></span>
+        <span>เชื่อมต่อฐานข้อมูล Traffy Fondue & กรมควบคุมมลพิษ สำเร็จ</span>
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  
+  <!-- Data Registry and Main App Scripts -->
+  <script src="districts-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
